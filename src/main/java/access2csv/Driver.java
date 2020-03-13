@@ -44,7 +44,7 @@ public class Driver {
 	static void importCSV(final File inputFile, final File dbFile, String delimiter) throws IOException {
 		final Database db = DatabaseBuilder.create(FileFormat.V2000, dbFile);
 		try {
-			if(delimiter.isBlank() || delimiter.isEmpty())
+			if(delimiter.isEmpty())
 			{
 				delimiter = ",";
 			}
