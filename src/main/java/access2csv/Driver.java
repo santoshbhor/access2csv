@@ -42,7 +42,7 @@ public class Driver {
 	}
 
 	static void importCSV(final File inputFile, final File dbFile, String delimiter) throws IOException {
-		final Database db = DatabaseBuilder.create(FileFormat.V2000, dbFile);
+		final Database db = dbFile.exists() ? DatabaseBuilder.open(dbFile) : DatabaseBuilder.create(FileFormat.V2000, dbFile);
 		try {
 			if(delimiter.isEmpty())
 			{
