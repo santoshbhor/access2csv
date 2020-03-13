@@ -100,4 +100,10 @@ public class DriverTest {
 		Driver.main(new String[] { "--input", "does-not-exist.accdb", "--with-header" , "--output", new File(testDir, "dir-does-not-exist").toString()});
 	}
 
+	@Test
+	public final void testImport() throws Exception {
+		thrown.expect(FileNotFoundException.class);
+		Driver.main(new String[] { "--input", new File(testDir, "table.csv").toString(), "--import" , "--output", new File(testDir, "testimport.accdb").toString()});
+	}
+
 }

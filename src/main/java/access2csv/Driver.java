@@ -44,7 +44,10 @@ public class Driver {
 	static void importCSV(final File inputFile, final File dbFile) throws IOException {
 		final Database db = DatabaseBuilder.create(FileFormat.V2000, dbFile);
 		try {
+			System.out.println("InputFile :" + inputFile);
+			System.out.println("OutputFile (db) :" + dbFile);
 			new ImportUtil.Builder(db, getFileNameWithoutExtension(inputFile)).setDelimiter(",").importFile(inputFile);
+			System.out.println("Import completed!");
 		} finally {
 			db.close();
 		}
