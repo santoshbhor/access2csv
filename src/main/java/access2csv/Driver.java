@@ -59,8 +59,8 @@ public class Driver {
 			final boolean applyQuotesToAll, final String nullText) throws IOException {
 		final Table table = db.getTable(tableName);
 		final String[] buffer = new String[table.getColumnCount()];
-		final CSVWriter writer = new CSVWriter(new BufferedWriter(csv), CSVWriter.DEFAULT_SEPARATOR,
-				CSVWriter.DEFAULT_QUOTE_CHARACTER);
+		final CSVWriter writer = new CSVWriter(new BufferedWriter(csv));
+		//upgraded csvwrited to latest version ... new CSVWriter(new BufferedWriter(csv), CSVWriter.DEFAULT_SEPARATOR,CSVWriter.DEFAULT_QUOTE_CHARACTER, CSVWriter.DEFAULT_ESCAPE_CHARACTER, CSVWriter.DEFAULT_LINE_END);
 		int rows = 0;
 		try {
 			if (withHeader) {
