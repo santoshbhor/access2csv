@@ -48,6 +48,7 @@ public class Driver {
 
 	class CSVImportFilter extends SimpleImportFilter
 	{
+		@Override
 		public List<ColumnBuilder> filterColumns(final List<ColumnBuilder> destColumns,
 				final ResultSetMetaData srcColumns) throws SQLException, IOException {
 			System.out.println("Converting all Text Fields to Memo fields for maximum length!");
