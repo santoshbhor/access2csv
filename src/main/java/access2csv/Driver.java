@@ -7,6 +7,8 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.Writer;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 
@@ -19,7 +21,10 @@ import joptsimple.OptionSpec;
 
 import com.healthmarketscience.jackcess.*;
 import com.healthmarketscience.jackcess.Database.FileFormat;
+import com.healthmarketscience.jackcess.util.ImportFilter;
 import com.healthmarketscience.jackcess.util.ImportUtil;
+import com.healthmarketscience.jackcess.util.SimpleImportFilter;
+
 import org.apache.commons.io.FilenameUtils;
 
 public class Driver {
@@ -41,15 +46,33 @@ public class Driver {
 
 	}
 
+	class CSVImportFilter extends SimpleImportFilter
+	{
+		public List<ColumnBuilder> filterColumns(final List<ColumnBuilder> destColumns,
+				final ResultSetMetaData srcColumns) throws SQLException, IOException {
+			System.out.println("Converting all Text Fields to Memo fields for maximum length!");
+			for (final ColumnBuilder column : destColumns) {
+				// map all TEXT fields to Type MEMO to allow max length allowed by java
+				if (column.getType().compareTo(DataType.TEXT) == 0) {
+					column.setType(DataType.MEMO);
+					column.setMaxLength();
+				}
+			}
+			return destColumns;
+		}
+	}
+
 	static void importCSV(final File inputFile, final File dbFile, String delimiter) throws IOException {
-		final Database db = dbFile.exists() ? DatabaseBuilder.open(dbFile) : DatabaseBuilder.create(FileFormat.V2016, dbFile);
-		
+		final Database db = dbFile.exists() ? DatabaseBuilder.open(dbFile)
+				: DatabaseBuilder.create(FileFormat.V2016, dbFile);
+
 		try {
-			if(delimiter.isEmpty())
-			{
+			if (delimiter.isEmpty()) {
 				delimiter = ",";
 			}
-			new ImportUtil.Builder(db, getFileNameWithoutExtension(inputFile)).setDelimiter(delimiter).importFile(inputFile);
+			final SimpleImportFilter filter = CSVImportFilter.INSTANCE;
+			new ImportUtil.Builder(db, getFileNameWithoutExtension(inputFile)).setDelimiter(delimiter).setFilter(filter)
+					.importFile(inputFile);
 		} finally {
 			db.close();
 		}
@@ -60,7 +83,10 @@ public class Driver {
 		final Table table = db.getTable(tableName);
 		final String[] buffer = new String[table.getColumnCount()];
 		final CSVWriter writer = new CSVWriter(new BufferedWriter(csv));
-		//upgraded csvwrited to latest version ... new CSVWriter(new BufferedWriter(csv), CSVWriter.DEFAULT_SEPARATOR,CSVWriter.DEFAULT_QUOTE_CHARACTER, CSVWriter.DEFAULT_ESCAPE_CHARACTER, CSVWriter.DEFAULT_LINE_END);
+		// upgraded csvwrited to latest version ... new CSVWriter(new
+		// BufferedWriter(csv),
+		// CSVWriter.DEFAULT_SEPARATOR,CSVWriter.DEFAULT_QUOTE_CHARACTER,
+		// CSVWriter.DEFAULT_ESCAPE_CHARACTER, CSVWriter.DEFAULT_LINE_END);
 		int rows = 0;
 		try {
 			if (withHeader) {
@@ -148,10 +174,11 @@ public class Driver {
 				.describedAs("The schema is written to standard output.");
 		final OptionSpec<String> importcsv = parser.accepts("import").withOptionalArg()
 				.describedAs("When import is included, the given csv input file is imported into the output mdb file.");
-		final OptionSpec<String> importdelimiter = parser.accepts("import-delimiter").withOptionalArg().ofType(String.class)
-				.defaultsTo(",").describedAs("Data Delimiter for importing (input) csv file. If not provided defaults to ','");
+		final OptionSpec<String> importdelimiter = parser.accepts("import-delimiter").withOptionalArg()
+				.ofType(String.class).defaultsTo(",")
+				.describedAs("Data Delimiter for importing (input) csv file. If not provided defaults to ','");
 		final OptionSpec<String> withHeader = parser.accepts("with-header").withOptionalArg().describedAs(
-				"When with-header is included, a header line of column names is written to each data file.");		
+				"When with-header is included, a header line of column names is written to each data file.");
 		final OptionSpec<File> input = parser.accepts("input").withRequiredArg().ofType(File.class).required()
 				.describedAs("The input accdb file.");
 		final OptionSpec<String> table = parser.accepts("table").withRequiredArg().ofType(String.class)
@@ -198,28 +225,27 @@ public class Driver {
 			if (options.has(output)) {
 				outputDir = output.value(options);
 				final String _extension = FilenameUtils.getExtension(outputDir.getName());
-				boolean _outputIsMdbFile = _extension.equalsIgnoreCase("mdb") || _extension.equalsIgnoreCase("accdb");
-				boolean _outputFileExists = outputDir.exists();
+				final boolean _outputIsMdbFile = _extension.equalsIgnoreCase("mdb")
+						|| _extension.equalsIgnoreCase("accdb");
+				final boolean _outputFileExists = outputDir.exists();
 				System.out.println("OutPut FileName: " + outputDir.getName());
 				System.out.println("OutPut Extension: " + _extension);
 				System.out.println("OutPut IsMdb: " + _outputIsMdbFile);
 				System.out.println("OutPut FileExists: " + _outputFileExists);
 
 				if (_outputIsMdbFile && _outputFileExists) {
-					// output is a mdb file and exists	
+					// output is a mdb file and exists
 					dbFile = outputDir;
 				}
 
-				if (_outputIsMdbFile && !_outputFileExists) 				
-				{
-				    // if extension is accdb or mdb but file doesnot exists					
+				if (_outputIsMdbFile && !_outputFileExists) {
+					// if extension is accdb or mdb but file doesnot exists
 					final String _filePath = outputDir.getCanonicalPath();
 					dbFile = new File(FilenameUtils.removeExtension(_filePath) + ".accdb");
 				}
-				
-				//if out is an empty extension aka not a file
-				if (!_outputIsMdbFile && _extension.equalsIgnoreCase("")) 
-				{
+
+				// if out is an empty extension aka not a file
+				if (!_outputIsMdbFile && _extension.equalsIgnoreCase("")) {
 					// output is not a file but a target directory create a new file and set it as
 					// accdb
 					final String _filePath = outputDir.getCanonicalPath();
@@ -228,7 +254,7 @@ public class Driver {
 				System.out.println("Importing data into mdb started!");
 				System.out.println("InputFile :" + inputFile);
 				System.out.println("OutPut MDB: " + dbFile.getName());
-				String _delimiter = importdelimiter.value(options);
+				final String _delimiter = importdelimiter.value(options);
 				importCSV(inputFile, dbFile, _delimiter);
 				System.out.println("Importing data into mdb completed!");
 			}
