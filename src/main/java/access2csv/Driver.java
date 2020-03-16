@@ -44,24 +44,7 @@ public class Driver {
 
 		return fileName;
 
-	}
-
-	class CSVImportFilter extends SimpleImportFilter
-	{
-		@Override
-		public List<ColumnBuilder> filterColumns(final List<ColumnBuilder> destColumns,
-				final ResultSetMetaData srcColumns) throws SQLException, IOException {
-			System.out.println("Converting all Text Fields to Memo fields for maximum length!");
-			for (final ColumnBuilder column : destColumns) {
-				// map all TEXT fields to Type MEMO to allow max length allowed by java
-				if (column.getType().compareTo(DataType.TEXT) == 0) {
-					column.setType(DataType.MEMO);
-					column.setMaxLength();
-				}
-			}
-			return destColumns;
-		}
-	}
+	}	
 
 	static void importCSV(final File inputFile, final File dbFile, String delimiter) throws IOException {
 		final Database db = dbFile.exists() ? DatabaseBuilder.open(dbFile)
@@ -71,7 +54,21 @@ public class Driver {
 			if (delimiter.isEmpty()) {
 				delimiter = ",";
 			}
-			final SimpleImportFilter filter = CSVImportFilter.INSTANCE;
+			ImportFilter filter = new SimpleImportFilter() {				
+				@Override
+				public List<ColumnBuilder> filterColumns(final List<ColumnBuilder> destColumns,
+				final ResultSetMetaData srcColumns) throws SQLException, IOException {
+					System.out.println("Converting all Text Fields to Memo fields for maximum length!");
+					for (final ColumnBuilder column : destColumns) {
+						// map all TEXT fields to Type MEMO to allow max length allowed by java
+						if (column.getType().compareTo(DataType.TEXT) == 0) {
+							column.setType(DataType.MEMO);
+							column.setMaxLength();
+						}
+					}
+					return destColumns;
+				}
+			};
 			new ImportUtil.Builder(db, getFileNameWithoutExtension(inputFile)).setDelimiter(delimiter).setFilter(filter)
 					.importFile(inputFile);
 		} finally {
