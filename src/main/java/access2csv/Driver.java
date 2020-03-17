@@ -26,6 +26,7 @@ import com.healthmarketscience.jackcess.util.ImportUtil;
 import com.healthmarketscience.jackcess.util.SimpleImportFilter;
 
 import org.apache.commons.io.FilenameUtils;
+import org.apache.commons.lang3.StringUtils;
 
 public class Driver {
 
@@ -59,13 +60,16 @@ public class Driver {
 				public List<ColumnBuilder> filterColumns(final List<ColumnBuilder> destColumns,
 				final ResultSetMetaData srcColumns) throws SQLException, IOException {
 					System.out.println("Converting all Text Fields to Memo fields for maximum length!");
+					StringBuilder cols = new StringBuilder();
 					for (final ColumnBuilder column : destColumns) {
+						cols.append(column.getName() + ",");
 						// map all TEXT fields to Type MEMO to allow max length allowed by java
 						if (column.getType().compareTo(DataType.TEXT) == 0) {
 							column.setType(DataType.MEMO);
 							column.setMaxLength();
 						}
 					}
+					System.out.println("Header Columns: " + StringUtils.stripEnd(cols.toString(),","));
 					return destColumns;
 				}
 			};
