@@ -55,14 +55,26 @@ public class Driver {
 			if (delimiter.isEmpty()) {
 				delimiter = ",";
 			}
-			ImportFilter filter = new SimpleImportFilter() {				
+			ImportFilter filter = new SimpleImportFilter() {
 				@Override
 				public List<ColumnBuilder> filterColumns(final List<ColumnBuilder> destColumns,
 				final ResultSetMetaData srcColumns) throws SQLException, IOException {
 					System.out.println("Converting all Text Fields to Memo fields for maximum length!");
 					StringBuilder cols = new StringBuilder();
-					for (final ColumnBuilder column : destColumns) {
-						cols.append(column.getName() + ",");
+					for (ColumnBuilder column : destColumns) {
+						String colname = column.getName();
+						String tname = colname.substring(1);//exclude first character can be a reserved character defined inside TableBuilder.ESCAPE_PREFIX 
+						boolean isres = TableBuilder.isReservedWord(tname); //check if the name is a special reserved name
+						String escapedname = TableBuilder.escapeIdentifier(tname);
+						boolean usetname = isres && escapedname.equals(colname);
+						String nametouse = usetname ? tname :colname;
+						cols.append(nametouse + ",");
+					
+						if(usetname)
+						{
+							column.putProperty("Caption", nametouse); //set caption so that table will correct displayed column name
+						}
+
 						// map all TEXT fields to Type MEMO to allow max length allowed by java
 						if (column.getType().compareTo(DataType.TEXT) == 0) {
 							column.setType(DataType.MEMO);
@@ -73,7 +85,7 @@ public class Driver {
 					return destColumns;
 				}
 			};
-			new ImportUtil.Builder(db, getFileNameWithoutExtension(inputFile)).setDelimiter(delimiter).setFilter(filter)
+			new ImportUtil.Builder(db, getFileNameWithoutExtension(inputFile)).setDelimiter(delimiter).setFilter(filter).setHeader(true)
 					.importFile(inputFile);
 		} finally {
 			db.close();
