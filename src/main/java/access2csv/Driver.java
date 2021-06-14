@@ -27,6 +27,7 @@ import com.healthmarketscience.jackcess.util.SimpleImportFilter;
 
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.joor.Reflect;
 
 public class Driver {
 
@@ -73,6 +74,7 @@ public class Driver {
 						if(usetname)
 						{
 							column.putProperty("Caption", nametouse); //set caption so that table will correct displayed column name
+							Reflect.on(column).set("_name", nametouse);
 						}
 
 						// map all TEXT fields to Type MEMO to allow max length allowed by java
