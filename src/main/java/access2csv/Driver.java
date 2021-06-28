@@ -5,29 +5,44 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.PrintWriter;
+//import java.io.PrintWriter;
 import java.io.Writer;
+//import java.lang.reflect.Field;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.util.ArrayList;
+//import java.sql.Types;
 import java.util.Arrays;
+//import java.util.HashMap;
 import java.util.List;
+//import java.util.Map;
+import java.util.Optional;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.opencsv.CSVWriter;
-
 import joptsimple.OptionException;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
-
 import com.healthmarketscience.jackcess.*;
 import com.healthmarketscience.jackcess.Database.FileFormat;
+import com.healthmarketscience.jackcess.impl.ByteUtil;
 import com.healthmarketscience.jackcess.util.ImportFilter;
 import com.healthmarketscience.jackcess.util.ImportUtil;
+import com.healthmarketscience.jackcess.util.ReplacementErrorHandler;
 import com.healthmarketscience.jackcess.util.SimpleImportFilter;
 
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.joor.Reflect;
+//import access2csv.ImportSchemaFile;
+import com.opencsv.CSVReader;
+import com.opencsv.bean.ColumnPositionMappingStrategy;
+import com.opencsv.bean.CsvToBean;
+//import com.opencsv.bean.HeaderColumnNameMappingStrategy;
+import java.io.FileReader;
 
 public class Driver {
 
@@ -46,9 +61,170 @@ public class Driver {
 
 		return fileName;
 
-	}	
+	}
+	
+	static void importCSV(final File inputFile, final File dbFile, String delimiter,final DataType defaultType, final List<ImportSchemaFile> colschema) throws IOException {
+		final Database db = dbFile.exists() ? DatabaseBuilder.open(dbFile)
+				: DatabaseBuilder.create(FileFormat.V2016, dbFile);
 
-	static void importCSV(final File inputFile, final File dbFile, String delimiter) throws IOException {
+		try {
+			final Boolean hascolSchema = colschema ==null ? false: !colschema.isEmpty();
+			if (delimiter.isEmpty()) {
+				delimiter = ",";
+			}
+			
+			List<ImportSchemaFile> _colschema = hascolSchema ? colschema.stream()
+			.filter(s -> !(Arrays.asList(ImportSchemaFileHeaders)
+			.contains(s.getcolumn())))
+			.collect(Collectors.toList())
+			:null;
+
+			ImportFilter filter = new SimpleImportFilter() {
+				List<RowDataImportError> rowerrors = new ArrayList<RowDataImportError>();
+				int rownum = 0;
+				
+				@Override
+				public Object[] filterRow(Object[] row) throws SQLException, IOException
+				{
+					if(!hascolSchema) 
+						return row;
+					
+						rownum +=1;
+					//System.out.println(Arrays.toString(row));
+					if(row != null && _colschema != null)
+					{
+						if(_colschema.size() >= row.length)
+						{
+							RowDataImportError rderr = validatedatarow(row);
+							if(rderr.hasErrors())
+							{
+								rderr.RowNum = rownum;
+								rderr.RowsAsCsv = Arrays.toString(row);
+								rderr.printErrorsToConsole();
+								rowerrors.add(rderr);
+							}
+						}
+					}
+					return row;
+				}
+
+				private Pattern pattern = Pattern.compile("-?\\d+(\\.\\d+)?");
+				public boolean isNumeric(String strNum) {
+					if (strNum == null) {
+						return false; 
+					}
+					return pattern.matcher(strNum).matches();
+				}
+
+				private RowDataImportError validatedatarow(Object[] row)
+				{
+					RowDataImportError err = new RowDataImportError();
+					for (ImportSchemaFile importSchemaFile : _colschema) {
+						int i = _colschema.indexOf(importSchemaFile);
+						Object v = row.length >= i?row[i]:null;
+						if(v == null)
+							continue;
+						else
+						{
+							DataType dt = importSchemaFile.toAccessDataType();
+							
+							if(dt == DataType.NUMERIC)
+							{
+								Boolean isnumeric = isNumeric(v.toString());
+								if(!isnumeric)
+								{
+									err.ColumnNum = i;
+									err.ColumnName = importSchemaFile.getcolumn();
+									err.ColumnValue = v.toString();
+									err.DataTypeDefined = importSchemaFile.toAccessDataType();
+									err.ErrorMessage = "Data Type (" + dt + ") Mismatch -> value -> " + v.toString();
+									rowerrors.add(err);
+								}
+							}
+
+							if(dt == DataType.TEXT || dt.isTextual())
+							{
+								Boolean isdatalenvalid = dt.isValidSize(v.toString().length());
+								if(!isdatalenvalid)
+								{
+									//System.out.println("ROW (" + i + ") ERROR -> " + Arrays.toString(row));
+									//System.out.println("column(" + importSchemaFile.getcolumn() + ") -> Data Length (" + v.toString().length() + " > expected size for " + dt + " ) -> Data (" + v.toString() + ")" );
+									err.ColumnNum = i;
+									err.ColumnName = importSchemaFile.getcolumn();
+									err.ColumnValue = v.toString();
+									err.DataTypeDefined = importSchemaFile.toAccessDataType();
+									err.ErrorMessage = "Data Length (" + v.toString().length() + " > expected size for " + dt + " ) -> Data (" + v.toString() + ")";
+								}
+							}
+
+						}
+					}
+					return err;
+				}
+
+
+				@Override
+				public List<ColumnBuilder> filterColumns(final List<ColumnBuilder> destColumns,	final ResultSetMetaData srcColumns) throws SQLException, IOException {
+					System.out.println("Converting all Text Fields to Memo fields for maximum length!");
+					StringBuilder cols = new StringBuilder();
+					for (ColumnBuilder column : destColumns) {
+						String colname = column.getName();
+						String tname = colname.substring(1);//exclude first character can be a reserved character defined inside TableBuilder.ESCAPE_PREFIX 
+						boolean isres = TableBuilder.isReservedWord(tname); //check if the name is a special reserved name
+						String escapedname = TableBuilder.escapeIdentifier(tname);
+						boolean usetname = isres && escapedname.equals(colname);
+						final String nametouse = usetname ? tname :colname;
+						cols.append(nametouse + ",");
+					
+						if(usetname)
+						{
+							column.putProperty("Caption", nametouse); //set caption so that table will correct displayed column name
+							Reflect.on(column).set("_name", nametouse);
+						}
+
+						if(hascolSchema)
+						{
+							Optional<ImportSchemaFile> colschresult = colschema.stream().filter(o -> o.getcolumn().equalsIgnoreCase(usetname?nametouse:colname)).findFirst();
+							if(colschresult.isPresent())
+							{
+								ImportSchemaFile colsch = colschresult.get();
+								try {
+									colsch.defaultDataType = defaultType;
+									DataType dt = colsch.toAccessDataType();//resolveDataType(colsch, defaultType);
+									System.out.println("(" + (usetname?nametouse:colname) + ") -> " + "Access: " + dt);
+									column.setType(dt);
+									column.setMaxLength();
+								} catch (Exception e) {
+									column.setType(defaultType);
+									column.setMaxLength();
+								}								
+							}
+						}else
+						{
+							// map all TEXT fields to Type MEMO to allow max length allowed by java
+							if (column.getType().compareTo(DataType.TEXT) == 0) {
+								column.setType(defaultType);
+								column.setMaxLength();
+							}
+						}
+					}
+					System.out.println("Header Columns: " + StringUtils.stripEnd(cols.toString(),","));
+					//_tablecolumns = destColumns;
+					return destColumns;
+				}
+			};
+			
+			new ImportUtil.Builder(db, getFileNameWithoutExtension(inputFile))
+			.setDelimiter(delimiter)
+			.setFilter(filter)
+			.setHeader(true)
+			.importFile(inputFile);
+		} finally {
+			db.close();
+		}
+	}
+	
+	static void importCSV(final File inputFile, final File dbFile, String delimiter,final DataType defaultType) throws IOException {
 		final Database db = dbFile.exists() ? DatabaseBuilder.open(dbFile)
 				: DatabaseBuilder.create(FileFormat.V2016, dbFile);
 
@@ -79,7 +255,7 @@ public class Driver {
 
 						// map all TEXT fields to Type MEMO to allow max length allowed by java
 						if (column.getType().compareTo(DataType.TEXT) == 0) {
-							column.setType(DataType.MEMO);
+							column.setType(defaultType);
 							column.setMaxLength();
 						}
 					}
@@ -182,12 +358,30 @@ public class Driver {
 
 	}
 
+	static String[] ImportSchemaFileHeaders = new String[] {"column","datatype","length"};
+
+	static List<ImportSchemaFile> loadSchemafile(final File inputFile) throws IOException {
+		CSVReader reader = new CSVReader(new FileReader(inputFile));
+		try {		
+			ColumnPositionMappingStrategy<ImportSchemaFile> beanStrategy = new ColumnPositionMappingStrategy<ImportSchemaFile>();
+			beanStrategy.setType(ImportSchemaFile.class);
+			beanStrategy.setColumnMapping(ImportSchemaFileHeaders);			
+			CsvToBean<ImportSchemaFile> csvToBean = new CsvToBean<ImportSchemaFile>();
+			csvToBean.setCsvReader(reader);
+			csvToBean.setMappingStrategy(beanStrategy);		
+			List<ImportSchemaFile> impschema = csvToBean.parse();
+			return impschema;
+		}finally{
+			reader.close();
+		}
+	}
+
 	public static void main(final String[] args) throws Exception {
 		final OptionParser parser = new OptionParser();
 
 		final OptionSpec<Void> help = parser.acceptsAll(Arrays.asList("help")).forHelp();
 		final OptionSpec<String> schema = parser.accepts("schema").withOptionalArg()
-				.describedAs("The schema is written to standard output.");
+				.describedAs("The schema is written to standard output while exporting. \n* if included with --import then the <filename.ext.schema> (csv format) with column,datatype,length is loaded and used while importing data.\n eg: \"--input filename.csv --output filename.accdb --import --schema\" will look and load schema for columns from \"filename.csv.schema\"");
 		final OptionSpec<String> importcsv = parser.accepts("import").withOptionalArg()
 				.describedAs("When import is included, the given csv input file is imported into the output mdb file.");
 		final OptionSpec<String> importdelimiter = parser.accepts("import-delimiter").withOptionalArg()
@@ -271,7 +465,28 @@ public class Driver {
 				System.out.println("InputFile :" + inputFile);
 				System.out.println("OutPut MDB: " + dbFile.getName());
 				final String _delimiter = importdelimiter.value(options);
-				importCSV(inputFile, dbFile, _delimiter);
+				//DataType.fromSQLType(sqlType, lengthInUnits, fileFormat)
+				List<ImportSchemaFile> improws = null;
+				if (options.has(schema)) {
+					final String _inputschemafilename = inputFile.getName().trim()+".schema";
+					final String _infpath = inputFile.getPath().trim()+".schema";
+					final File inputschemaFile = new File(_infpath);
+					System.out.println("SchemaFile: " + _inputschemafilename);
+					if (!inputschemaFile.exists()) {
+						System.out.println("SchemaFile: Does not Exists! Skipping Schema load!");
+					}else
+					{
+						improws = loadSchemafile(inputschemaFile);
+						//System.out.println("SchemaFile Loaded: " + inputschemaFile.getName() + " -> " + improws.size() + " rows ");
+						System.out.println("---------" + inputschemaFile.getName() + "---------");
+						for (ImportSchemaFile irow : improws) {
+							System.out.println(irow.toCsv());
+						}
+						System.out.println("---------" + inputschemaFile.getName() + "---------");
+					}					
+				}
+
+				importCSV(inputFile, dbFile, _delimiter, DataType.MEMO, improws);				
 				System.out.println("Importing data into mdb completed!");
 			}
 
