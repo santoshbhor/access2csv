@@ -467,12 +467,13 @@ public class Driver {
 				final String _delimiter = importdelimiter.value(options);
 				//DataType.fromSQLType(sqlType, lengthInUnits, fileFormat)
 				List<ImportSchemaFile> improws = null;
-				if (options.has(schema)) {
-					final String _inputschemafilename = inputFile.getName().trim()+".schema";
-					final String _infpath = inputFile.getPath().trim()+".schema";
-					final File inputschemaFile = new File(_infpath);
+				final String _inputschemafilename = inputFile.getName().trim()+".schema";
+				final String _infpath = inputFile.getPath().trim()+".schema";
+				final File inputschemaFile = new File(_infpath);
+				Boolean schemaFileExists = inputschemaFile.exists();
+				if (options.has(schema) || schemaFileExists) {					
 					System.out.println("SchemaFile: " + _inputschemafilename);
-					if (!inputschemaFile.exists()) {
+					if (!schemaFileExists) {
 						System.out.println("SchemaFile: Does not Exists! Skipping Schema load!");
 					}else
 					{
