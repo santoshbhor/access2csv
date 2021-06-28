@@ -13,7 +13,7 @@ public class RowDataImportError {
     public Boolean hasErrors()
     {
         if(ErrorMessage == null) return false;
-        if(ErrorMessage.isBlank() || ErrorMessage.isEmpty()) return false;
+        if(ErrorMessage.trim().length() == 0 || ErrorMessage.isEmpty()) return false;
         
         return true;
     }
