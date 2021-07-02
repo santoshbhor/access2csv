@@ -61,7 +61,7 @@ public class Driver {
 
 		return fileName;
 
-	}
+	}	
 	
 	static void importCSV(final File inputFile, final File dbFile, String delimiter,final DataType defaultType, final List<ImportSchemaFile> colschema) throws IOException {
 		final Database db = dbFile.exists() ? DatabaseBuilder.open(dbFile)
@@ -82,6 +82,7 @@ public class Driver {
 			ImportFilter filter = new SimpleImportFilter() {
 				List<RowDataImportError> rowerrors = new ArrayList<RowDataImportError>();
 				int rownum = 0;
+				ArrayList<String> _columnsindata = new ArrayList<String>();//set from filtercolumns 
 				
 				@Override
 				public Object[] filterRow(Object[] row) throws SQLException, IOException
@@ -93,8 +94,8 @@ public class Driver {
 					//System.out.println(Arrays.toString(row));
 					if(row != null && _colschema != null)
 					{
-						if(_colschema.size() >= row.length)
-						{
+						//if(_colschema.size() >= row.length)
+						//{
 							RowDataImportError rderr = validatedatarow(row);
 							if(rderr.hasErrors())
 							{
@@ -103,7 +104,7 @@ public class Driver {
 								rderr.printErrorsToConsole();
 								rowerrors.add(rderr);
 							}
-						}
+						//}
 					}
 					return row;
 				}
@@ -120,7 +121,17 @@ public class Driver {
 				{
 					RowDataImportError err = new RowDataImportError();
 					for (ImportSchemaFile importSchemaFile : _colschema) {
-						int i = _colschema.indexOf(importSchemaFile);
+						String columnname = importSchemaFile.getcolumn();
+						Optional<String> colindataname = _columnsindata.stream().filter(o -> o.equalsIgnoreCase(columnname)).findFirst();
+						
+						if(!colindataname.isPresent())
+						{
+							System.out.println("Ignoring (" + columnname + ") -> cannot find in -> " + Arrays.toString(_columnsindata.toArray()));
+							continue;
+						}
+						
+						//resolve data from column to be processed inside schema
+						int i = _columnsindata.indexOf(colindataname.get());
 						Object v = row.length >= i?row[i]:null;
 						if(v == null)
 							continue;
@@ -182,6 +193,12 @@ public class Driver {
 							Reflect.on(column).set("_name", nametouse);
 						}
 
+						//set default type on the column
+						if (column.getType().compareTo(DataType.TEXT) == 0) {
+							column.setType(defaultType);
+							column.setMaxLength();
+						}
+
 						if(hascolSchema)
 						{
 							Optional<ImportSchemaFile> colschresult = colschema.stream().filter(o -> o.getcolumn().equalsIgnoreCase(usetname?nametouse:colname)).findFirst();
@@ -199,29 +216,26 @@ public class Driver {
 									column.setMaxLength();
 								}								
 							}
-						}else
-						{
-							// map all TEXT fields to Type MEMO to allow max length allowed by java
-							if (column.getType().compareTo(DataType.TEXT) == 0) {
-								column.setType(defaultType);
-								column.setMaxLength();
-							}
 						}
+
+						//add columnnames to use later during filterrows to check what data is in what column
+						_columnsindata.add(usetname?nametouse:colname); 
 					}
 					System.out.println("Header Columns: " + StringUtils.stripEnd(cols.toString(),","));
-					//_tablecolumns = destColumns;
+					
 					return destColumns;
 				}
-			};
+			};			
 			
 			new ImportUtil.Builder(db, getFileNameWithoutExtension(inputFile))
 			.setDelimiter(delimiter)
 			.setFilter(filter)
 			.setHeader(true)
-			.importFile(inputFile);
+			.importFile(inputFile);			
+			
 		} finally {
 			db.close();
-		}
+		}		
 	}
 	
 	static void importCSV(final File inputFile, final File dbFile, String delimiter,final DataType defaultType) throws IOException {
