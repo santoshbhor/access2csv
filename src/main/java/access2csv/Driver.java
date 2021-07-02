@@ -121,6 +121,10 @@ public class Driver {
 				{
 					RowDataImportError err = new RowDataImportError();
 					for (ImportSchemaFile importSchemaFile : _colschema) {
+
+						if(importSchemaFile.isHeader()) //ignore if its an header column inside schema file
+							continue;
+					
 						String columnname = importSchemaFile.getcolumn();
 						Optional<String> colindataname = _columnsindata.stream().filter(o -> o.equalsIgnoreCase(columnname)).findFirst();
 						
@@ -384,7 +388,7 @@ public class Driver {
 			csvToBean.setCsvReader(reader);
 			csvToBean.setMappingStrategy(beanStrategy);		
 			List<ImportSchemaFile> impschema = csvToBean.parse();
-			return impschema;
+			return impschema.stream().filter(s -> !s.isHeader()).collect(Collectors.toList()); //filter if there were any header rows in schema file
 		}finally{
 			reader.close();
 		}

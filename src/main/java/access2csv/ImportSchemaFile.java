@@ -35,6 +35,10 @@ public class ImportSchemaFile {
 		return column + "," + datatype;
 	}
 
+	public Boolean isHeader(){
+		return column.equalsIgnoreCase("column") && datatype.equalsIgnoreCase("datatype");
+	}
+
 	public DataType toAccessDataType()
 	{
 		DataType rettype = defaultDataType;
